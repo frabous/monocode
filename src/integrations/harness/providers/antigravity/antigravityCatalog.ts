@@ -1,4 +1,5 @@
 import { homeDir } from "../../../../platform/tauri/fs";
+import { usesNativeAntigravity, refreshNativeAntigravityCatalog } from "./antigravityNative";
 import { setHarnessModels } from "../../../../features/sessions/model/models";
 import { AcpClient } from "../../core/acp";
 import {
@@ -18,6 +19,7 @@ const REQUEST_TIMEOUT_MS = 12_000;
 let inflight: Promise<void> | null = null;
 
 export function refreshAntigravityCatalog(): Promise<void> {
+  if (usesNativeAntigravity()) return refreshNativeAntigravityCatalog();
   if (inflight) return inflight;
   inflight = discoverAntigravityModels()
     .then((models) => {

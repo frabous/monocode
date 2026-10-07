@@ -4,6 +4,7 @@ import { supportsProviderAccounts } from "../../../features/providers/model/prov
 import { HARNESS_TITLE, type HarnessId } from "../../../features/sessions/model/session";
 import * as child from "./child";
 import { harnessLoginArgs } from "./authSupport";
+import { usesNativeAntigravity, loginNativeAntigravity, refreshNativeAntigravityCatalog } from "../providers/antigravity/antigravityNative";
 
 export {
   harnessLoginArgs,
@@ -68,6 +69,11 @@ async function runHarnessLogin(
   harness: HarnessId,
   accountId?: string,
 ): Promise<void> {
+  if (harness === "antigravity" && usesNativeAntigravity()) {
+    await loginNativeAntigravity();
+    await refreshNativeAntigravityCatalog();
+    return;
+  }
   const args = harnessLoginArgs(harness);
   const resolve = LOGIN_RESOLVERS[harness];
   if (!args || !resolve) {

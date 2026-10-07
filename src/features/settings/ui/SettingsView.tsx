@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { AntigravityAccountControl } from "./AntigravityAccountControl";
+import { usesNativeAntigravity } from "../../../integrations/harness/providers/antigravity/antigravityNative";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ConnectionsSettings } from "../../connections/ui/ConnectionsSettings";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -3734,7 +3736,9 @@ function ProviderRow({
         <span className="flex items-center gap-2">
           <HarnessIcon harness={harness} className="size-4 shrink-0" />
           {HARNESS_TITLE[harness]}
-          <ProviderBinaryControl provider={harness} />
+          {harness === "antigravity" && usesNativeAntigravity()
+            ? <AntigravityAccountControl />
+            : <ProviderBinaryControl provider={harness} />}
           {isDefault ? (
             <span className="rounded-full bg-content/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-content/60">
               Default

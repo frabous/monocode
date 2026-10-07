@@ -13,6 +13,7 @@ import {
   resolvePiBinary,
 } from "./child";
 import { isLiveHarness } from "./registry";
+import { usesNativeAntigravity, nativeAntigravityAccount } from "../providers/antigravity/antigravityNative";
 import {
   emitHarnessAvailability,
   harnessAvailabilityProbedAt,
@@ -64,6 +65,7 @@ let inflight: Promise<void> | null = null;
 const PROBE_TTL_MS = 30_000;
 
 export function harnessUnavailableHint(id: HarnessId): string {
+  if (id === "antigravity" && usesNativeAntigravity()) return "Antigravity native backend is unavailable. Restart MonoCode and retry.";
   const { name, install } = CLI[id];
   const how = install ? ` (\`${install}\`)` : "";
   return `${name} not found${how}. Install it, or restart MonoCode if it is already installed.`;
@@ -154,6 +156,7 @@ export function probeHarnessAvailability(
       }
       if (id === "antigravity") {
         try {
+          if (usesNativeAntigravity()) return [id, (await nativeAntigravityAccount()).backendAvailable] as const;
           await resolveAntigravityBinary();
           return [id, true] as const;
         } catch {
