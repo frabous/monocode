@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { SecondaryButton } from "../../../shared/ui/SecondaryButton";
 import { loginHarness } from "../../../integrations/harness/core/auth";
 import {
   cancelNativeAntigravityLogin,
@@ -42,7 +43,6 @@ export function AntigravityAccountControl() {
     finally { await refreshStatus(); setWorking(false); setConnecting(false); }
   }
 
-  const button = "rounded border border-content/15 px-2 py-1 text-[11px] font-normal text-content/70 hover:bg-content/10 disabled:opacity-40";
   return (
     <span className="flex flex-wrap items-center gap-2 font-normal" aria-label="Antigravity Google account">
       <span className="text-[11px] text-content/50">
@@ -50,23 +50,23 @@ export function AntigravityAccountControl() {
       </span>
       {account?.authenticated ? (
         <>
-          <button type="button" className={button} disabled={working}
-            onClick={() => void run(logoutNativeAntigravity)}>Disconnect Google</button>
-          <button type="button" className={button} disabled={working}
-            onClick={() => void run(refreshNativeAntigravityCatalog)}>Refresh models</button>
+          <SecondaryButton disabled={working}
+            onClick={() => void run(logoutNativeAntigravity)}>Disconnect Google</SecondaryButton>
+          <SecondaryButton disabled={working}
+            onClick={() => void run(refreshNativeAntigravityCatalog)}>Refresh models</SecondaryButton>
         </>
       ) : (
-        <button type="button" className={button}
+        <SecondaryButton
           disabled={working || account?.loginPending || !account?.backendAvailable}
           onClick={() => void run(() => loginHarness("antigravity"), true)}>
           {connecting ? "Connecting…" : "Connect Google"}
-        </button>
+        </SecondaryButton>
       )}
       {connecting ? (
-        <button type="button" className={button}
+        <SecondaryButton
           onClick={() => void cancelNativeAntigravityLogin().catch((error: Error) => setError(error.message))}>
           Cancel sign-in
-        </button>
+        </SecondaryButton>
       ) : null}
       {error ? <span role="alert" className="basis-full text-[11px] text-red-400">{error}</span> : null}
     </span>
