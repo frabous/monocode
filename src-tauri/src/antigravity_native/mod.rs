@@ -730,6 +730,7 @@ pub async fn antigravity_native_send(
 }
 
 fn user_parts(cwd: &Path, input: &TurnInput, cancel: &Cancel) -> Result<Vec<Value>> {
+    const MAX_ATTACHMENT_BYTES: u64 = 10 * 1024 * 1024;
     if input.text.len() > 2 * 1024 * 1024 || input.attachments.len() > 20 {
         return Err(NativeError::new(
             "input",
@@ -745,17 +746,34 @@ fn user_parts(cwd: &Path, input: &TurnInput, cancel: &Cancel) -> Result<Vec<Valu
         let data = if let Some(data) = &attachment.data {
             data.clone()
         } else if let Some(path) = &attachment.path {
-            let path = tools::workspace_path(cwd, path, false)?;
-            let metadata = std::fs::metadata(&path)
+            // Attachments are explicitly supplied by the user and may live in
+            // Downloads or MonoCode's temporary attachment directory. Model
+            // file tools keep their separate workspace-only path checks.
+            let path = cwd.join(path);
+            let file = std::fs::File::open(&path)
                 .map_err(|_| NativeError::new("input", "Attachment could not be read."))?;
-            if metadata.len() > 10 * 1024 * 1024 {
+            let metadata = file
+                .metadata()
+                .map_err(|_| NativeError::new("input", "Attachment could not be read."))?;
+            if !metadata.is_file() {
+                return Err(NativeError::new(
+                    "input",
+                    "Attachment must be a regular file.",
+                ));
+            }
+            if metadata.len() > MAX_ATTACHMENT_BYTES {
+                return Err(NativeError::new("input", "Attachment exceeds 10 MiB."));
+            }
+            use std::io::Read;
+            let mut bytes = Vec::new();
+            file.take(MAX_ATTACHMENT_BYTES + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|_| NativeError::new("input", "Attachment could not be read."))?;
+            if bytes.len() as u64 > MAX_ATTACHMENT_BYTES {
                 return Err(NativeError::new("input", "Attachment exceeds 10 MiB."));
             }
             use base64::Engine;
-            base64::engine::general_purpose::STANDARD.encode(
-                std::fs::read(path)
-                    .map_err(|_| NativeError::new("input", "Attachment could not be read."))?,
-            )
+            base64::engine::general_purpose::STANDARD.encode(bytes)
         } else {
             return Err(NativeError::new("input", "Attachment data is unavailable."));
         };

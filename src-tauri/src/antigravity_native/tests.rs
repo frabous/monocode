@@ -81,6 +81,102 @@ fn permission_modes_are_fail_closed() {
     assert_eq!(permission("powershell", "full-access", false), Allow);
 }
 
+#[test]
+fn user_attachments_outside_workspace_are_embedded_without_granting_tool_access() {
+    use base64::Engine;
+
+    let dir = TestDir::new();
+    let workspace = dir.0.join("workspace");
+    let downloads = dir.0.join("Downloads");
+    let temporary = dir.0.join("monocode-attachments");
+    for path in [&workspace, &downloads, &temporary] {
+        std::fs::create_dir(path).unwrap();
+    }
+    let files = [
+        (
+            downloads.join("notes.txt"),
+            "text/plain",
+            b"outside notes".as_slice(),
+        ),
+        (
+            downloads.join("document.pdf"),
+            "application/pdf",
+            b"%PDF-1.7".as_slice(),
+        ),
+        (
+            temporary.join("screenshot.png"),
+            "image/png",
+            b"image bytes".as_slice(),
+        ),
+        (
+            workspace.join("local.txt"),
+            "text/plain",
+            b"local notes".as_slice(),
+        ),
+    ];
+    let mut request = input(&workspace);
+    for (index, (path, mime_type, bytes)) in files.iter().enumerate() {
+        std::fs::write(path, bytes).unwrap();
+        request.attachments.push(Attachment {
+            name: path.file_name().unwrap().to_string_lossy().into(),
+            mime_type: (*mime_type).into(),
+            data: None,
+            path: Some(if index == 3 {
+                "local.txt".into()
+            } else {
+                path.to_string_lossy().into()
+            }),
+        });
+    }
+    let parts = user_parts(&workspace, &request, &Cancel::default()).unwrap();
+    assert_eq!(parts.len(), 5);
+    assert_eq!(parts[1]["text"], "Attached file: notes.txt\noutside notes");
+    for index in [1, 2] {
+        assert_eq!(parts[index + 1]["inlineData"]["mimeType"], files[index].1);
+        assert_eq!(
+            parts[index + 1]["inlineData"]["data"],
+            base64::engine::general_purpose::STANDARD.encode(files[index].2)
+        );
+    }
+    assert_eq!(parts[4]["text"], "Attached file: local.txt\nlocal notes");
+    assert!(tools::workspace_path(&workspace, &files[0].0.to_string_lossy(), false).is_err());
+}
+
+#[test]
+fn user_attachment_paths_keep_size_file_and_cancellation_checks() {
+    let dir = TestDir::new();
+    let workspace = dir.0.join("workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let large = dir.0.join("large.txt");
+    std::fs::File::create(&large)
+        .unwrap()
+        .set_len(10 * 1024 * 1024 + 1)
+        .unwrap();
+    let mut request = input(&workspace);
+    request.attachments.push(Attachment {
+        name: "large.txt".into(),
+        mime_type: "text/plain".into(),
+        data: None,
+        path: Some(large.to_string_lossy().into()),
+    });
+    assert_eq!(
+        user_parts(&workspace, &request, &Cancel::default())
+            .unwrap_err()
+            .message,
+        "Attachment exceeds 10 MiB."
+    );
+    request.attachments[0].path = Some(dir.0.to_string_lossy().into());
+    assert!(user_parts(&workspace, &request, &Cancel::default()).is_err());
+    request.attachments[0].path = Some(dir.0.join("missing.txt").to_string_lossy().into());
+    assert!(user_parts(&workspace, &request, &Cancel::default()).is_err());
+    let cancel = Cancel::default();
+    cancel.cancel();
+    assert_eq!(
+        user_parts(&workspace, &request, &cancel).unwrap_err().code,
+        "cancelled"
+    );
+}
+
 struct TestDir(PathBuf);
 impl TestDir {
     fn new() -> Self {
