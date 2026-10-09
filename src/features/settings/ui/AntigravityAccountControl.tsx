@@ -11,7 +11,7 @@ import {
 } from "../../../integrations/harness/providers/antigravity/antigravityNative";
 
 /** Windows account actions replace the Antigravity executable-path control. */
-export function AntigravityAccountControl() {
+export function AntigravityAccountControl({ cwd }: { cwd?: string }) {
   const [account, setAccount] = useState<AntigravityAccountStatus>();
   const [working, setWorking] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -58,7 +58,7 @@ export function AntigravityAccountControl() {
       ) : (
         <SecondaryButton
           disabled={working || account?.loginPending || !account?.backendAvailable}
-          onClick={() => void run(() => loginHarness("antigravity"), true)}>
+          onClick={() => void run(() => loginHarness("antigravity", undefined, cwd), true)}>
           {connecting ? "Connecting…" : "Connect Google"}
         </SecondaryButton>
       )}

@@ -3215,8 +3215,8 @@ function ProvidersPage({
     : (choice?.harness ?? null);
 
   useEffect(() => {
-    void probeHarnessAvailability();
-  }, []);
+    void probeHarnessAvailability({ cwd });
+  }, [cwd]);
 
   useEffect(() => {
     if (!scopeOptions.some((option) => option.value === scope)) {
@@ -3317,6 +3317,7 @@ function ProvidersPage({
             <ProviderRow
               key={harness}
               harness={harness}
+              cwd={cwd}
               selectedModel={selectedModel}
               isDefault={isDefault}
               inPicker={inPicker}
@@ -3732,6 +3733,7 @@ function ProjectScopeIcon({ path }: { path: string }) {
 
 function ProviderRow({
   harness,
+  cwd,
   selectedModel,
   isDefault,
   inPicker,
@@ -3741,6 +3743,7 @@ function ProviderRow({
   onPickerVisible,
 }: {
   harness: HarnessId;
+  cwd?: string;
   selectedModel: string;
   isDefault: boolean;
   inPicker: boolean;
@@ -3757,8 +3760,8 @@ function ProviderRow({
 
   useEffect(() => {
     if (!available || hasLiveCatalog(harness)) return;
-    void refreshHarnessCatalogs([harness]);
-  }, [available, harness]);
+    void refreshHarnessCatalogs([harness], { cwd });
+  }, [available, harness, cwd]);
 
   return (
     <Row
@@ -3766,8 +3769,8 @@ function ProviderRow({
         <span className="flex items-center gap-2">
           <HarnessIcon harness={harness} className="size-4 shrink-0" />
           {HARNESS_TITLE[harness]}
-          {harness === "antigravity" && usesNativeAntigravity()
-            ? <AntigravityAccountControl />
+          {harness === "antigravity" && usesNativeAntigravity(cwd)
+            ? <AntigravityAccountControl cwd={cwd} />
             : <ProviderBinaryControl provider={harness} />}
           {isDefault ? (
             <span className="rounded-full bg-content/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-content/60">
@@ -3779,7 +3782,7 @@ function ProviderRow({
       description={
         available
           ? `${models.length} ${models.length === 1 ? "model" : "models"} available.`
-          : harnessUnavailableHint(harness)
+          : harnessUnavailableHint(harness, cwd)
       }
     >
       {current ? (
@@ -3792,7 +3795,7 @@ function ProviderRow({
             // `models` non-empty, and routine refreshes skip once a live
             // catalog exists, so force this one past that skip.
             if (available) {
-              void refreshHarnessCatalogs([harness], { force: true });
+              void refreshHarnessCatalogs([harness], { force: true, cwd });
             }
           }}
           options={models.map((item) => ({

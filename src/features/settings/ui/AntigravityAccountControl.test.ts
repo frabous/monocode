@@ -19,14 +19,14 @@ beforeEach(() => {
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
-const render = async () => { await act(async () => root.render(createElement(AntigravityAccountControl))); };
+const render = async () => { await act(async () => root.render(createElement(AntigravityAccountControl, { cwd: "C:/test" }))); };
 function button(text: string): HTMLButtonElement { return [...container.querySelectorAll("button")].find((button) => button.textContent?.includes(text))!; }
 
 it("checks status without opening OAuth and connects only after a click", async () => {
   await render();
   expect(container.textContent).toContain("Not signed in"); expect(mock.login).not.toHaveBeenCalled();
   await act(async () => button("Connect Google").click());
-  expect(mock.login).toHaveBeenCalledWith("antigravity"); expect(mock.status).toHaveBeenCalledTimes(2);
+  expect(mock.login).toHaveBeenCalledWith("antigravity", undefined, "C:/test"); expect(mock.status).toHaveBeenCalledTimes(2);
 });
 
 it("shows account errors while keeping the backend connection action available", async () => {

@@ -7,7 +7,9 @@ import { setHarnessModels, type AgentModel } from "../../../../features/sessions
 import { hasHeadlessChildBackend } from "../../core/child";
 import type { ApprovalDecision, HarnessEvent, SendTurnInput } from "../../core/types";
 
-export function usesNativeAntigravity(cwd?: string): boolean {
+// Callers must supply their workspace context; undefined denotes a local,
+// account-level action without an open workspace.
+export function usesNativeAntigravity(cwd: string | undefined): boolean {
   return IS_WIN && !cwd?.startsWith(REMOTE_PATH_PREFIX) &&
     isTauri() && !hasHeadlessChildBackend();
 }

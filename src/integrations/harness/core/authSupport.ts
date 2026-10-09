@@ -17,8 +17,8 @@ const LOGIN_ARGS: Partial<Record<HarnessId, readonly string[]>> = {
   devin: ["auth", "login"],
 };
 
-export function supportsHarnessLogin(harness: HarnessId): boolean {
-  if (harness === "antigravity") return usesNativeAntigravity();
+export function supportsHarnessLogin(harness: HarnessId, cwd?: string): boolean {
+  if (harness === "antigravity") return usesNativeAntigravity(cwd);
   return LOGIN_ARGS[harness] != null;
 }
 

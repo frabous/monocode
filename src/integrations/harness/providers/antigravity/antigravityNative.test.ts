@@ -11,6 +11,7 @@ vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => mock.tauri, invoke: mock
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ listen: mock.listen }) }));
 vi.mock("../../../../platform/tauri/platform", () => ({ get IS_WIN() { return mock.windows; } }));
 vi.mock("../../core/child", () => ({ hasHeadlessChildBackend: () => mock.headless, spawnChild: mock.spawn, resolveAntigravityBinary: mock.resolve }));
+vi.mock("../../core/registry", () => ({ isLiveHarness: (id: string) => id === "antigravity" }));
 vi.mock("../../../../features/sessions/model/models", () => ({ setHarnessModels: mock.models }));
 vi.mock("../../../../platform/tauri/fs", () => ({ homeDir: async () => "C:/test", saveGeneratedImage: mock.saveImage, deleteGeneratedImages: mock.deleteImages }));
 
@@ -18,6 +19,8 @@ import * as native from "./antigravityNative";
 import * as agy from "./antigravity";
 import { refreshAntigravityCatalog } from "./antigravityCatalog";
 import { loginHarness } from "../../core/auth";
+import { supportsHarnessLogin } from "../../core/authSupport";
+import { harnessUnavailableHint, isHarnessAvailable, probeHarnessAvailability } from "../../core/availability";
 
 const deferred = () => {
   let resolve!: () => void;
@@ -37,6 +40,7 @@ function emit(turn: { sessionId: string; turnId: string }, event: unknown) {
 beforeEach(() => {
   vi.clearAllMocks(); mock.windows = true; mock.tauri = true; mock.headless = false;
   mock.invoke.mockResolvedValue(undefined);
+  mock.resolve.mockResolvedValue({ path: "C:/agy_acp_server.par", args: [] });
   mock.saveImage.mockResolvedValue({ path: "C:/test/image.png", mimeType: "image/png", size: 4 });
   mock.listen.mockImplementation(async (_name, listener) => { mock.listener = listener; return mock.unlisten; });
 });
@@ -45,9 +49,9 @@ describe("native Windows Antigravity", () => {
   it("routes only local desktop Windows and never starts a CLI", async () => {
     expect(native.usesNativeAntigravity("C:/test")).toBe(true);
     expect(native.usesNativeAntigravity("remote://host/project")).toBe(false);
-    mock.headless = true; expect(native.usesNativeAntigravity()).toBe(false);
-    mock.headless = false; mock.windows = false; expect(native.usesNativeAntigravity()).toBe(false);
-    mock.windows = true; mock.tauri = false; expect(native.usesNativeAntigravity()).toBe(false);
+    mock.headless = true; expect(native.usesNativeAntigravity("C:/test")).toBe(false);
+    mock.headless = false; mock.windows = false; expect(native.usesNativeAntigravity("C:/test")).toBe(false);
+    mock.windows = true; mock.tauri = false; expect(native.usesNativeAntigravity("C:/test")).toBe(false);
     mock.tauri = true;
     await agy.sendAntigravityTurn(input("native-route"));
     expect(mock.invoke).toHaveBeenCalledWith("antigravity_native_send", expect.any(Object));
@@ -60,11 +64,66 @@ describe("native Windows Antigravity", () => {
       : command === "antigravity_native_catalog" ? [{ id: "antigravity:gemini-3.8-flash-high", harness: "antigravity" }] : undefined);
     expect(await native.nativeAntigravityAccount()).toMatchObject({ backendAvailable: true, authenticated: false });
     expect(mock.invoke).toHaveBeenCalledTimes(1);
-    await loginHarness("antigravity"); await refreshAntigravityCatalog();
+    await loginHarness("antigravity", undefined, "C:/test"); await refreshAntigravityCatalog("C:/test");
     expect(mock.models).toHaveBeenCalledWith("antigravity", expect.arrayContaining([expect.objectContaining({ harness: "antigravity" })]));
     await native.logoutNativeAntigravity();
     expect(mock.invoke).toHaveBeenCalledWith("antigravity_native_logout", undefined);
     expect(mock.spawn).not.toHaveBeenCalled(); expect(mock.resolve).not.toHaveBeenCalled();
+  });
+
+  it("does not offer or join local native sign-in from a remote Windows workspace", async () => {
+    const cwd = "remote://host/project";
+    expect(supportsHarnessLogin("antigravity", "C:/test")).toBe(true);
+    expect(supportsHarnessLogin("antigravity", cwd)).toBe(false);
+    const gate = deferred();
+    mock.invoke.mockImplementation(async (command) => command === "antigravity_native_login"
+      ? gate.promise : [{ id: "antigravity:gemini-3.8-flash-high", harness: "antigravity" }]);
+    const localLogin = loginHarness("antigravity", undefined, "C:/test");
+    await expect(loginHarness("antigravity", undefined, cwd)).rejects.toThrow("does not offer a single browser sign-in flow");
+    gate.resolve();
+    await localLogin;
+    expect(mock.invoke.mock.calls.map(([command]) => command)).toEqual([
+      "antigravity_native_login", "antigravity_native_catalog",
+    ]);
+  });
+
+  it("reprobes availability when switching between local native and remote CLI workspaces", async () => {
+    mock.invoke.mockResolvedValue({ backendAvailable: true });
+    mock.resolve.mockRejectedValue(new Error("Remote CLI not installed"));
+    await probeHarnessAvailability({ cwd: "C:/test", force: true });
+    expect(isHarnessAvailable("antigravity")).toBe(true);
+    await probeHarnessAvailability({ cwd: "remote://host/project" });
+    expect(isHarnessAvailable("antigravity")).toBe(false);
+    expect(mock.resolve).toHaveBeenCalledOnce();
+    expect(mock.invoke).toHaveBeenCalledTimes(1);
+    expect(harnessUnavailableHint("antigravity", "remote://host/project")).toContain("agy_acp_server.par");
+    expect(harnessUnavailableHint("antigravity", "C:/test")).toContain("native backend");
+    await probeHarnessAvailability({ cwd: "C:/test" });
+    expect(isHarnessAvailable("antigravity")).toBe(true);
+    expect(mock.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reuse an in-flight local availability probe for a remote workspace", async () => {
+    const gate = deferred();
+    mock.invoke.mockImplementation(async () => { await gate.promise; return { backendAvailable: true }; });
+    mock.resolve.mockRejectedValue(new Error("Remote CLI not installed"));
+    const local = probeHarnessAvailability({ cwd: "C:/test", force: true });
+    const remote = probeHarnessAvailability({ cwd: "remote://host/project" });
+    gate.resolve();
+    await Promise.all([local, remote]);
+    expect(mock.resolve).toHaveBeenCalledOnce();
+    expect(mock.invoke).toHaveBeenCalledOnce();
+    expect(isHarnessAvailable("antigravity")).toBe(false);
+  });
+
+  it("routes a remote Windows catalog refresh to the CLI without querying the native account", async () => {
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    try {
+      mock.resolve.mockRejectedValue(new Error("Remote CLI not installed"));
+      await refreshAntigravityCatalog("remote://host/project");
+      expect(mock.resolve).toHaveBeenCalledOnce();
+      expect(mock.invoke).not.toHaveBeenCalled();
+    } finally { debug.mockRestore(); }
   });
 
   it("maps native events and concrete approval previews with session and turn filtering", async () => {
