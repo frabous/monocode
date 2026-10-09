@@ -7,9 +7,12 @@ mod automations;
 mod azure_devops;
 mod chat_background;
 mod checkpoint;
+mod codex_mono_store;
 mod control;
 pub mod control_cli;
 mod cursor_store;
+mod devin_config;
+mod devin_usage;
 mod external_editor;
 mod fs;
 mod gitlab;
@@ -17,6 +20,7 @@ mod harness;
 mod harness_updates;
 mod inbox_media;
 mod jira;
+mod jsonc;
 mod linear;
 mod link_preview;
 #[cfg(target_os = "macos")]
@@ -45,6 +49,8 @@ mod search;
 mod session_store;
 mod skills;
 pub mod ssh_askpass;
+#[cfg(target_os = "macos")]
+mod trackpad_zoom;
 #[cfg(target_os = "windows")]
 mod tray;
 mod window;
@@ -205,6 +211,15 @@ fn set_dock_badge(
 }
 
 #[tauri::command]
+fn set_trackpad_zoom_enabled(
+    #[allow(unused_variables)] window: tauri::WebviewWindow,
+    #[allow(unused_variables)] enabled: bool,
+) {
+    #[cfg(target_os = "macos")]
+    trackpad_zoom::set_enabled(&window, enabled);
+}
+
+#[tauri::command]
 fn open_new_window(app: tauri::AppHandle) -> Result<(), String> {
     window::open_new_window(&app)
 }
@@ -215,6 +230,8 @@ fn should_request_quit(code: Option<i32>) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "macos")]
+    macos::register_spellcheck_default();
     #[cfg(windows)]
     windows::initialize().expect("Failed to initialize Windows process safety");
     let app = tauri::Builder::default()
@@ -326,6 +343,7 @@ pub fn run() {
             fs::git_stage_all,
             fs::git_unstage_all,
             fs::git_commit,
+            fs::git_locate_files,
             fs::git_head_message,
             fs::git_staged_context,
             fs::git_push,
@@ -439,6 +457,7 @@ pub fn run() {
             harness::harness_resolve_fx,
             harness::harness_resolve_grok,
             harness::harness_resolve_hermes,
+            harness::harness_resolve_devin,
             harness::harness_resolve_antigravity,
             antigravity_native::antigravity_native_status,
             antigravity_native::antigravity_native_login,
@@ -452,6 +471,9 @@ pub fn run() {
             antigravity_native::antigravity_native_stop,
             harness::harness_free_port,
             harness::harness_spawn,
+            codex_mono_store::codex_mono_store_prepare,
+            codex_mono_store::codex_mono_store_copy,
+            codex_mono_store::codex_mono_store_restore_agent_state,
             harness::harness_write,
             harness::harness_kill,
             harness::harness_kill_all,
@@ -467,6 +489,7 @@ pub fn run() {
             pi_usage::fetch_pi_usage,
             rate_limits::fetch_claude_usage,
             rate_limits::fetch_opencode_go_usage,
+            devin_usage::fetch_devin_usage,
             pty::pty_spawn,
             pty::pty_write,
             pty::pty_resize,
@@ -507,6 +530,8 @@ pub fn run() {
             mono::mono_read,
             mono::mono_save,
             checkpoint::session_checkpoint_ensure,
+            checkpoint::session_checkpoint_begin_turn,
+            checkpoint::session_checkpoint_finish_turn,
             checkpoint::session_checkpoint_prepare,
             checkpoint::session_checkpoint_capture,
             checkpoint::session_checkpoint_status,
@@ -519,6 +544,7 @@ pub fn run() {
             set_traffic_lights_visible,
             set_window_background_blur,
             set_dock_badge,
+            set_trackpad_zoom_enabled,
             #[cfg(target_os = "macos")]
             menu::keybindings_set_overrides,
             #[cfg(target_os = "macos")]
@@ -574,6 +600,10 @@ pub fn run() {
             mono_chat::mono_chat_reply,
             #[cfg(target_os = "macos")]
             mono_chat::mono_chat_keep_alive,
+            #[cfg(target_os = "macos")]
+            mono_chat::mono_chat_switch,
+            #[cfg(target_os = "macos")]
+            mono_chat::mono_menu_bar_set_visible,
             window_transfer::stage_window_transfer,
             window_transfer::take_window_transfer,
             chat_background::save_chat_background,
